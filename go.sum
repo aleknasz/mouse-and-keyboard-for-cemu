@@ -1,0 +1,7 @@
+github.com/gorilla/websocket v1.5.0 h1:PPwGk2jz7EePpoHN/+ClbZu8SPxiqlu12wZP/3sWmnc=
+github.com/gorilla/websocket v1.5.0/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/robotn/gohook v0.40.0 h1:qqjyRUIoRwwa9yv4xVeL8hX+vdhc9j56p9kF0D+hUuM=
+github.com/robotn/gohook v0.40.0/go.mod h1:wyGik0yb4iwCfJjDprtNkTyxkgQWuKoVPQ3hkz6+6js=
+github.com/vcaesar/keycode v0.10.0 h1:Qx5QE8ZXHyRyjoA2QOxBp25OKMKB+zxMVqm0FWGV0d4=
+github.com/vcaesar/keycode v0.10.0/go.mod h1:JNlY7xbKsh+LAGfY2j4M3znVrGEm5W1R8s/Uv6BJcfQ=
+github.com/vcaesar/tt v0.20.0 h1:9t2Ycb9RNHcP0WgQgIaRKJBB+FrRdejuaL6uWIHuoBA=

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Gyro Client</title>
+    <style>
+    </style>
+  </head>
+  <body>
+    <p>Version: 2</p>
+    <p><label id="lblConnected"></label></p>
+    <p><label id="lblEvents"></label></p>
+     <p><label id="lblX"></label></p>
+      <p><label id="lblY"></label></p>
+       <p><label id="lblZ"></label></p>
+        <p><label id="lblS"></label></p>
+    <script>
+      let bar = window.location.href;
+      let wsAddress = `ws://${bar.match(/^https?:\/\/([^:]+).+$/)[1]}:8080/ws`;
+      // console.log(wsAddress);
+      var ws = new WebSocket(wsAddress);
+
+      let scale = 1;
+      let screen = 'h';
+      let lblConnected = window.document.getElementById("lblConnected");
+      let lblEvents = window.document.getElementById("lblEvents");
+      let lblX = window.document.getElementById("lblX");
+      let lblY = window.document.getElementById("lblY");
+      let lblZ = window.document.getElementById("lblZ");
+      let lblS = window.document.getElementById("lblS");
+      var time = 0;
+      /*let zeros = {
+  x: 0.1,
+  y: 0.1,
+  z: 0.1,
+};*/
+      ws.onopen = function(ws_evnt) {
+        lblConnected.textContent = "Connected to " + wsAddress;
+        //window.ondeviceorientation = function(event) {
+        window.ondevicemotion = function(motion) {
+
+            var gyroV = {
+              x: scale * motion.rotationRate.alpha,
+              z: scale * motion.rotationRate.beta,
+              y: -scale * motion.rotationRate.gamma,
+            };
+            var gyroH = {
+              z: scale * motion.rotationRate.alpha,
+              x: -scale * motion.rotationRate.beta,
+              y: -scale * motion.rotationRate.gamma,
+            };
+            time++;
+            let gyroD = gyroH;
+              //screen == 'v' ? gyroV : gyroH;
+
+            lblS.textContent = 'Current Sensitivity:' + scale;
+            var data = {
+              ts: (Date.now() * 1000).toString(),
+              gyro: gyroD
+            }
+
+          let message = JSON.stringify(data); 
+          // , function(key, val) {
+          //   return val.toFixed ? Number(val.toFixed(20)) : val;
+          // });
+          // // window.alert(message);
+            if (time % 16 == 0) {
+              lblX.textContent = 'x: ' + gyroD.x;
+              lblY.textContent = 'y: ' + gyroD.y;
+              lblZ.textContent = 'z: ' + gyroD.z;
+              lblEvents.textContent = message;
+            }
+          ws.send(message);
+        };
+      };
+    </script>
+  </body>
+</html>
