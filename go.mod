@@ -1,4 +1,4 @@
-module mouse-and-keys-in-cemu
+module mouse-and-keyboard-for-cemu
 
 go 1.20
 
