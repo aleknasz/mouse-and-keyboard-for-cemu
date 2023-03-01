@@ -36,8 +36,11 @@
 };*/
       ws.onopen = function(ws_evnt) {
         lblConnected.textContent = "Connected to " + wsAddress;
+        ws.onmessage = (message) => {
+            lblS.textContent = 'Received:' + new String(message.data);
+          }
         //window.ondeviceorientation = function(event) {
-        window.ondevicemotion = function(motion) {
+        /*window.ondevicemotion = function(motion) {
 
             var gyroV = {
               x: scale * motion.rotationRate.alpha,
@@ -71,7 +74,7 @@
               lblEvents.textContent = message;
             }
           ws.send(message);
-        };
+        };*/
       };
     </script>
   </body>

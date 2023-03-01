@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	robot "github.com/go-vgo/robotgo"
 	websocket "github.com/gorilla/websocket"
 	hook "github.com/robotn/gohook"
 	"hash/crc32"
@@ -25,6 +26,7 @@ const clientTimeoutLimit = 30000
 var lastRequestAt = time.Now().UnixMilli()
 var connectedClient net.Addr = nil
 var packetCounter uint32 = 0
+var webSocketClient *websocket.Conn = nil
 
 // var report PhoneReport
 var udpServer net.PacketConn
@@ -96,7 +98,7 @@ func wsEndpoint(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 	}
 	fmt.Printf("Web clinet connected\n")
-	wsReader(ws)
+	webSocketClient = ws
 }
 
 func wsReader(conn *websocket.Conn) {
@@ -425,7 +427,8 @@ func Report(udpServer net.PacketConn, motionTimestamp uint64, accelerometer Vect
 
 func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 	var prevX, prevY int16 = -1, -1
-	var sensitivity float32 = 10.0
+	var sensitivity float32 = 25.0
+	var mouseSwitch bool = false
 	for ev := range chanHook {
 
 		if ev.Kind == hook.MouseMove {
@@ -453,16 +456,28 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			//	Report(udpServer, yaw, pitch, time.Now().UnixMilli())
 			//}
 
-			gyro := Vector3{0.0, sensitivity * pitch, sensitivity * -yaw}
+			var gyro = Vector3{0.0, sensitivity * pitch, sensitivity * -yaw}
 
-			//fmt.Printf("Mouse event: %v\n", gyro)
+			if mouseSwitch {
+				sx, sy := robot.GetScreenSize()
+				robot.Move(sx/2, sy/2)
+				//fmt.Printf("Mouse event: %v\n", gyro)
+			}
+
+			if webSocketClient != nil {
+				webSocketClient.WriteJSON(Vector3{0.0,
+					float32(ev.X), float32(ev.Y)})
+			}
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, gyro)
 
-			//else if ev.Kind == hook.KeyUp {
-			//	fmt.Printf("key up: %s\n", ev.Keychar)
+		} else if ev.Kind == hook.KeyUp {
+			//fmt.Printf("key up: %s\n", ev.Keychar)
 		} else if ev.Kind == hook.KeyDown {
-			fmt.Printf("key down: %v\n", ev.Keychar)
+			if ev.Keychar == 92 {
+				mouseSwitch = !mouseSwitch
+				fmt.Printf("Turned mouse %v\n", mouseSwitch)
+			}
 		}
 		//else if ev.Kind == hook.KeyHold {
 		//	fmt.Printf("key hold: %s\n", ev.Keychar)
