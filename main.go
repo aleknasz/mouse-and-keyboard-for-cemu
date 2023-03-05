@@ -12,6 +12,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"mouse-and-keyboard-for-cemu/controller"
 	"net"
 	"net/http"
 	"strconv"
@@ -472,15 +473,26 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, gyro)
 
 		} else if ev.Kind == hook.KeyUp {
-			//fmt.Printf("key up: %s\n", ev.Keychar)
+
+			key := controller.Raw2Keycode[ev.Rawcode]
+
+			fmt.Printf("\nKey Up: %s %d\n", key.Name, ev.Rawcode)
+
+			//	fmt.Printf("key up: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
+			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
 		} else if ev.Kind == hook.KeyDown {
-			if ev.Keychar == 92 {
-				mouseSwitch = !mouseSwitch
-				fmt.Printf("Turned mouse %v\n", mouseSwitch)
-			}
+			key := controller.Raw2Keycode[ev.Rawcode]
+
+			fmt.Printf("\nKey down: %s %d\n", key.Name, ev.Rawcode)
+			//	fmt.Printf("-----")
+			//	fmt.Printf("key down: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
+			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
+		} else if ev.Kind == hook.KeyHold {
+			key := controller.Raw2Keycode[ev.Rawcode]
+
+			fmt.Printf("\nKey hold: %s %d\n", key.Name, ev.Rawcode)
+			//	fmt.Printf("key hold: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
+			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
 		}
-		//else if ev.Kind == hook.KeyHold {
-		//	fmt.Printf("key hold: %s\n", ev.Keychar)
-		//}
 	}
 }
