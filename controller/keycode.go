@@ -1,7 +1,7 @@
 package controller
 
 type KeyCode struct {
-	Keycode uint16
+	RawCode uint16
 	Name    string
 }
 

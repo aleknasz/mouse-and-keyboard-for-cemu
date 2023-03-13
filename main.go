@@ -5,9 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	robot "github.com/go-vgo/robotgo"
-	websocket "github.com/gorilla/websocket"
-	hook "github.com/robotn/gohook"
 	"hash/crc32"
 	"log"
 	"math"
@@ -18,7 +15,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	robot "github.com/go-vgo/robotgo"
+	websocket "github.com/gorilla/websocket"
+	hook "github.com/robotn/gohook"
 )
+
+var userController controller.ControllerState
 
 const maxProtocolVer = 1001
 const serverID = 1423567
@@ -333,9 +336,9 @@ func Report(udpServer net.PacketConn, motionTimestamp uint64, accelerometer Vect
 	packetCounter += 1
 	outIndex += 4
 
-	outBuffer[outIndex] = 0x00 // D-Pad Left, D-Pad Down, D-Pad Right, D-Pad Up, Options (?), R3, L3, Share (?)
+	outBuffer[outIndex] = userController.GetDPadMask() // D-Pad Left, D-Pad Down, D-Pad Right, D-Pad Up, Options (?), R3, L3, Share (?)
 	outIndex += 1
-	outBuffer[outIndex] = 0x00
+	outBuffer[outIndex] = userController.GetButtonMask() // Y, B, A, X, R1, L1, R2, L2
 	outIndex += 1
 	outBuffer[outIndex] = 0x00 // HOME Button (0 or 1)
 	outIndex += 1
@@ -432,7 +435,9 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 	var mouseSwitch bool = false
 	for ev := range chanHook {
 
-		if ev.Kind == hook.MouseMove {
+		if ev.Kind == hook.MouseMove || ev.Kind == hook.MouseDrag {
+
+			// y, x := ev.Y, ev.X
 
 			if prevX == -1 {
 				prevX = ev.X
@@ -472,27 +477,77 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, gyro)
 
+			// fmt.Printf("\nMouse move: %d %d\n", x, y)
+
 		} else if ev.Kind == hook.KeyUp {
 
 			key := controller.Raw2Keycode[ev.Rawcode]
+
+			if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
+				userController.PressDPad(controller.LEFT_DPAD, false)
+			} else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
+				userController.PressDPad(controller.DOWN_DPAD, false)
+			} else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
+				userController.PressDPad(controller.RIGHT_DPAD, false)
+			} else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
+				userController.PressDPad(controller.UP_DPAD, false)
+			} else if ev.Rawcode == controller.Return.RawCode {
+				userController.PressButton(controller.A_BUTTON, false)
+			} else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
+				userController.PressButton(controller.B_BUTTON, false)
+			}
+
+			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, zeroVector3)
+
+			// fmt.Printf("\nKey up: %x\n", userController.GetDPadMask())
 
 			fmt.Printf("\nKey Up: %s %d\n", key.Name, ev.Rawcode)
 
 			//	fmt.Printf("key up: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
 			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
-		} else if ev.Kind == hook.KeyDown {
-			key := controller.Raw2Keycode[ev.Rawcode]
-
-			fmt.Printf("\nKey down: %s %d\n", key.Name, ev.Rawcode)
-			//	fmt.Printf("-----")
-			//	fmt.Printf("key down: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
-			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
+			//} else if ev.Kind == hook.KeyDown {
+			//	key := controller.Raw2Keycode[ev.Rawcode]
+			//
+			//	fmt.Printf("\nKey down: %s %d\n", key.Name, ev.Rawcode)
 		} else if ev.Kind == hook.KeyHold {
-			key := controller.Raw2Keycode[ev.Rawcode]
+			// key := controller.Raw2Keycode[ev.Rawcode]
 
-			fmt.Printf("\nKey hold: %s %d\n", key.Name, ev.Rawcode)
+			if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
+				userController.PressDPad(controller.LEFT_DPAD, true)
+			} else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
+				userController.PressDPad(controller.DOWN_DPAD, true)
+			} else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
+				userController.PressDPad(controller.RIGHT_DPAD, true)
+			} else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
+				userController.PressDPad(controller.UP_DPAD, true)
+			} else if ev.Rawcode == controller.Return.RawCode {
+				userController.PressButton(controller.A_BUTTON, true)
+			} else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
+				userController.PressButton(controller.B_BUTTON, true)
+			}
+
+			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, zeroVector3)
+
+			// fmt.Printf("\nKey hold: %d %d\n", userController.GetDPadMask(), userController.IsDPadPressed(controller.LEFT_DPAD))
 			//	fmt.Printf("key hold: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
 			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
+		} else if ev.Kind == hook.MouseDown {
+			// button := ev.Button
+			// fmt.Printf("\nMouse down: %d\n", button)
+		} else if ev.Kind == hook.MouseUp {
+			// button := ev.Button
+			// fmt.Printf("\nMouse up: %d\n", button)
+		} else if ev.Kind == hook.MouseHold {
+			// button := ev.Button
+			// fmt.Printf("\nMouse hold: %d\n", button)
 		}
+		//else if ev.Kind == hook.MouseMove {
+		//	y, x := ev.Y, ev.X
+		//	fmt.Printf("\nMouse move: %d %d\n", x, y)
+		//}
+		//else if ev.Kind == hook.MouseDrag {
+		//	button := ev.Button
+		//	fmt.Printf("\nMouse drag: %d\n", button)
+		//}
 	}
 }
