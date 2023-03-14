@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"hash/crc32"
-	"log"
 	"math"
 	"strings"
 )
@@ -160,7 +159,7 @@ func (p *DSUProtocol) CreateControllerResponse(userController *ControllerState, 
 	outBuffer[outIndex] = y_axis // Right stick Y (plus upward)
 	outIndex += 1
 
-	log.Printf("Mouse move %d %d", x_axis, y_axis)
+	//log.Printf("Mouse move %d %d", x_axis, y_axis)
 
 	outBuffer[outIndex] = 0x00 // Analog D-Pad Left
 	outIndex += 1

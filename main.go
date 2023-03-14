@@ -32,6 +32,11 @@ var fpsInterval = 1000 / fps
 var then = time.Now().UnixMilli()
 var startTime = then
 
+const alt_xSen = 400
+const alt_ySen = 400
+
+var useX, useY, xZero, yZero int
+
 // Just setup key events listener and udp server for DSU protocol
 // Also there is some legacy logic for little web site serving and motion control receiving from android device
 func main() {
@@ -165,40 +170,93 @@ func whenHappened(event hook.Event, eventType uint8, action func(), expectations
 	return false
 }
 
+func Abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func MouseEvent(x int, y int, ignoreMouseEvent bool) {
+	intv := 1
+
+	if (x < 0 && useX > 0) || (x > 0 && useX < 0) {
+		useX = 0
+	}
+	if (y < 0 && useY > 0) || (y > 0 && useY < 0) {
+		useY = 0
+	}
+	if x != 0 && y != 0 {
+		intv = 4
+	}
+	if x == 0 {
+		xZero++
+	}
+	if xZero > 2 {
+		useX = 0
+		xZero = 0
+	}
+	if x > 0 {
+		useX += intv
+	} else {
+		useX -= intv
+	}
+	if y == 0 {
+		yZero++
+	}
+	if yZero > 2 {
+		useY = 0
+		yZero = 0
+	}
+	if y > 0 {
+		useY += intv
+	} else {
+		useY -= intv
+	}
+	if Abs(useX) > alt_xSen {
+		useX = useX / Abs(useX) * alt_xSen
+	} else if Abs(x) != 0 && Abs(useX) < alt_xSen/6 {
+		useX = useX / Abs(useX) * alt_xSen / 6
+	}
+
+	if Abs(useY) > alt_ySen {
+		useY = useY / Abs(useY) * alt_ySen
+	} else if Abs(y) != 0 && Abs(useY) < alt_ySen/6 {
+		useY = useY / Abs(useY) * alt_ySen / 6
+	}
+
+	if ignoreMouseEvent {
+		userController.MoveStick(controller.R_STICK, controller.X_AXIS, 0)
+		userController.MoveStick(controller.R_STICK, controller.Y_AXIS, 0)
+	} else {
+		userController.MoveStick(controller.R_STICK, controller.X_AXIS, -float32(useX)/alt_xSen)
+		userController.MoveStick(controller.R_STICK, controller.Y_AXIS, float32(useY)/alt_ySen)
+	}
+
+}
+
 // Some key or button has been pressed or mouse has been moved
 func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
-	var prevX, prevY int16 = -1, -1
+	var prevX, prevY int16 = 0, 0
 	var sensitivity float32 = 25.0
 	var mouseSwitch bool = false
+	var ignoreMouseMove bool = true
 	for ev := range chanHook {
 
-		if ev.Kind == hook.MouseDrag {
-
-			var yaw = float32(prevX - ev.X)
-			var pitch = float32(prevY - ev.Y)
-
-			prevX = ev.X
-			prevY = ev.Y
-
-			x_axis := float32(yaw)
-			y_axis := float32(pitch)
-
-			log.Printf("\nMouse drag: %d %d\n", x_axis, y_axis)
-
-		} else if ev.Kind == hook.MouseMove {
+		if ev.Kind == hook.MouseMove || ev.Kind == hook.MouseDrag {
 
 			// y, x := ev.Y, ev.X
 
-			if prevX == -1 {
-				prevX = ev.X
-			}
+			// if prevX == -1 {
+			// 	prevX = ev.X
+			// }
 
-			if prevY == -1 {
-				prevY = ev.Y
-			}
+			// if prevY == -1 {
+			// 	prevY = ev.Y
+			// }
 
-			var yaw = float32(prevX - ev.X)
-			var pitch = float32(prevY - ev.Y)
+			var yaw = prevX - ev.X
+			var pitch = prevY - ev.Y
 
 			prevX = ev.X
 			prevY = ev.Y
@@ -212,7 +270,7 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			//	Report(udpServer, yaw, pitch, time.Now().UnixMilli())
 			//}
 
-			var gyro = controller.Vector3{0.0, sensitivity * pitch, sensitivity * -yaw}
+			var gyro = controller.Vector3{0.0, sensitivity * float32(pitch), sensitivity * -float32(yaw)}
 
 			if mouseSwitch {
 				sx, sy := robot.GetScreenSize()
@@ -225,21 +283,22 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 					float32(ev.X), float32(ev.Y)})
 			}
 
-			x_axis := float32(yaw)
-			y_axis := float32(pitch)
+			MouseEvent(int(yaw), int(pitch), ignoreMouseMove)
+
+			// x_axis := float32(yaw)
+			// y_axis := float32(pitch)
 
 			if userController.IsButtonPressed(controller.Y_BUTTON) {
 				Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, gyro)
 			} else {
-				userController.MoveStick(controller.R_STICK, controller.X_AXIS, x_axis)
-				userController.MoveStick(controller.R_STICK, controller.Y_AXIS, y_axis)
+				// userController.MoveStick(controller.R_STICK, controller.X_AXIS, x_axis)
+				// userController.MoveStick(controller.R_STICK, controller.Y_AXIS, y_axis)
 
 				// log.Printf("Mouse move: %f %f\n", x_axis, y_axis)
-
 				Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 			}
 
-			log.Printf("\nMouse move: %d %d\n", x_axis, y_axis)
+			//log.Printf("\nMouse move: %d %d\n", x_axis, y_axis)
 
 		} else if ev.Kind == hook.KeyUp {
 
@@ -302,6 +361,11 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			whenHappened(ev, hook.KeyUp, func() {
 				userController.PressButton(controller.R_BUTTON, false)
 			}, controller.CHAR_E)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				ignoreMouseMove = !ignoreMouseMove
+				log.Printf("Ignore mouse=%d\n", ignoreMouseMove)
+			}, controller.ISO_Section)
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 
@@ -379,32 +443,36 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			// log.Printf("\nKey hold: %d %d\n", userController.GetDPadMask(), userController.IsDPadPressed(controller.LEFT_DPAD))
 			//	log.Printf("key hold: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
 			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
-		} else if ev.Kind == hook.MouseDown {
-			button := ev.Button
 
-			log.Printf("\nMouse down: %d\n", button)
-		} else if ev.Kind == hook.MouseUp {
+		} else if ev.Kind == hook.MouseUp || ev.Kind == hook.MouseDown {
 			button := ev.Button
 			if button == 1 {
-				//userController.PressButton(controller.Y_BUTTON, false)
+				userController.PressButton(controller.Y_BUTTON, false)
+				// Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 			} else if button == 2 {
 				userController.PressButton(controller.ZR_BUTTON, false)
+
 			}
+
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 
-			log.Printf("\nMouse up: %d\n", button)
+			log.Printf("\nMouse up: %d ignore=%d\n", button, ignoreMouseMove)
 		} else if ev.Kind == hook.MouseHold {
 			button := ev.Button
 			if button == 1 {
-				//userController.PressButton(controller.Y_BUTTON, true)
+				userController.PressButton(controller.Y_BUTTON, true)
+				// Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 			} else if button == 2 {
 				userController.PressButton(controller.ZR_BUTTON, true)
+
 			}
+
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
-			log.Printf("\nMouse hold: %d\n", button)
+
+			log.Printf("\nMouse hold: %d ignore=%d\n", button, ignoreMouseMove)
 		} else if ev.Kind == hook.MouseWheel {
 			// if ev.Rotation > 0 {
-			userController.MoveStick(controller.R_STICK, controller.X_AXIS, float32(ev.Rotation)*128.0)
+			userController.MoveStick(controller.R_STICK, controller.X_AXIS, float32(ev.Rotation)*255)
 			// } else if ev.Rotation < 0 {
 			// userController.MoveStick(controller.R_STICK, controller.X_AXIS, 1.0)
 			// }
