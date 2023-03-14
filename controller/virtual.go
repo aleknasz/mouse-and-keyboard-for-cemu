@@ -1,5 +1,7 @@
 package controller
 
+import "math"
+
 const (
 	A_BUTTON  = 0
 	B_BUTTON  = 1
@@ -66,6 +68,13 @@ func (state *ControllerState) GetStickMask(which int, axis int) byte {
 		return 0xFF
 	}
 	return 0x80
+}
+
+func (state *ControllerState) GetStickValue(which int, axis int) byte {
+	if state.stick[which][axis] == 0.0 {
+		return 0x80
+	}
+	return byte(math.Min(math.Max(128.0+float64(state.stick[which][axis]*128.0), 0.0), 255.0))
 }
 
 func (state *ControllerState) GetButtonMask() uint8 {

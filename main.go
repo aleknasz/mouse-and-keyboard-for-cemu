@@ -172,7 +172,20 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 	var mouseSwitch bool = false
 	for ev := range chanHook {
 
-		if ev.Kind == hook.MouseMove || ev.Kind == hook.MouseDrag {
+		if ev.Kind == hook.MouseDrag {
+
+			var yaw = float32(prevX - ev.X)
+			var pitch = float32(prevY - ev.Y)
+
+			prevX = ev.X
+			prevY = ev.Y
+
+			x_axis := float32(yaw)
+			y_axis := float32(pitch)
+
+			log.Printf("\nMouse drag: %d %d\n", x_axis, y_axis)
+
+		} else if ev.Kind == hook.MouseMove {
 
 			// y, x := ev.Y, ev.X
 
@@ -212,9 +225,21 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 					float32(ev.X), float32(ev.Y)})
 			}
 
-			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, gyro)
+			x_axis := float32(yaw)
+			y_axis := float32(pitch)
 
-			// log.Printf("\nMouse move: %d %d\n", x, y)
+			if userController.IsButtonPressed(controller.Y_BUTTON) {
+				Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, gyro)
+			} else {
+				userController.MoveStick(controller.R_STICK, controller.X_AXIS, x_axis)
+				userController.MoveStick(controller.R_STICK, controller.Y_AXIS, y_axis)
+
+				// log.Printf("Mouse move: %f %f\n", x_axis, y_axis)
+
+				Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
+			}
+
+			log.Printf("\nMouse move: %d %d\n", x_axis, y_axis)
 
 		} else if ev.Kind == hook.KeyUp {
 
@@ -361,7 +386,7 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 		} else if ev.Kind == hook.MouseUp {
 			button := ev.Button
 			if button == 1 {
-				userController.PressButton(controller.Y_BUTTON, false)
+				//userController.PressButton(controller.Y_BUTTON, false)
 			} else if button == 2 {
 				userController.PressButton(controller.ZR_BUTTON, false)
 			}
@@ -371,18 +396,18 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 		} else if ev.Kind == hook.MouseHold {
 			button := ev.Button
 			if button == 1 {
-				userController.PressButton(controller.Y_BUTTON, true)
+				//userController.PressButton(controller.Y_BUTTON, true)
 			} else if button == 2 {
 				userController.PressButton(controller.ZR_BUTTON, true)
 			}
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 			log.Printf("\nMouse hold: %d\n", button)
 		} else if ev.Kind == hook.MouseWheel {
-			if ev.Rotation > 0 {
-				userController.MoveStick(controller.R_STICK, controller.X_AXIS, -1.0)
-			} else if ev.Rotation < 0 {
-				userController.MoveStick(controller.R_STICK, controller.X_AXIS, 1.0)
-			}
+			// if ev.Rotation > 0 {
+			userController.MoveStick(controller.R_STICK, controller.X_AXIS, float32(ev.Rotation)*128.0)
+			// } else if ev.Rotation < 0 {
+			// userController.MoveStick(controller.R_STICK, controller.X_AXIS, 1.0)
+			// }
 			log.Printf("\nMouse wheel: %v %v %v\n", ev.Amount, ev.Rotation, ev.Direction)
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
