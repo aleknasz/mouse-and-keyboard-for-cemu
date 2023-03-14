@@ -1,19 +1,14 @@
 package main
 
 import (
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"hash/crc32"
 	"log"
-	"math"
 	"math/rand"
 	"mouse-and-keyboard-for-cemu/controller"
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	robot "github.com/go-vgo/robotgo"
@@ -23,13 +18,11 @@ import (
 
 var userController controller.ControllerState
 
-const maxProtocolVer = 1001
-const serverID = 1423567
 const clientTimeoutLimit = 30000
 
 var lastRequestAt = time.Now().UnixMilli()
 var connectedClient net.Addr = nil
-var packetCounter uint32 = 0
+
 var webSocketClient *websocket.Conn = nil
 
 // var report PhoneReport
@@ -41,58 +34,9 @@ var fpsInterval = 1000 / fps
 var then = time.Now().UnixMilli()
 var startTime = then
 
-type Vector3 struct {
-	Z float32 `json:"z"`
-	X float32 `json:"x"`
-	Y float32 `json:"y"`
-}
-
 type PhoneReport struct {
-	Ts   string  `json:"ts"`
-	Gyro Vector3 `json:"gyro"`
-}
-
-var zeroVector3 = Vector3{0.0, 0.0, 0.0}
-
-const (
-	DSUC_VersionReq = 0x100000
-	DSUS_VersionRsp = 0x100000
-	DSUC_ListPorts  = 0x100001
-	DSUS_PortInfo   = 0x100001
-	DSUC_PadDataReq = 0x100002
-	DSUS_PadDataRsp = 0x100002
-)
-
-func BeginPacket(data []byte) {
-
-	copy(data, "DSUS")
-
-	index := 4
-
-	binary.LittleEndian.PutUint16(data[index:], uint16(maxProtocolVer))
-	index += 2
-
-	binary.LittleEndian.PutUint16(data[index:], uint16(len(data)-16))
-	index += 2
-
-	binary.LittleEndian.PutUint32(data[index:], uint32(0))
-	index += 4
-
-	binary.LittleEndian.PutUint32(data[index:], uint32(serverID))
-	index += 4
-
-}
-
-func FinishPacket(data []byte) {
-	table := crc32.MakeTable(crc32.IEEE)
-	checksum := crc32.Checksum(data, table)
-	binary.LittleEndian.PutUint32(data[8:], checksum)
-}
-
-func SendPacket(udpServer net.PacketConn, addr net.Addr, buffer []byte) {
-	BeginPacket(buffer)
-	FinishPacket(buffer)
-	udpServer.WriteTo(buffer, addr)
+	Ts   string             `json:"ts"`
+	Gyro controller.Vector3 `json:"gyro"`
 }
 
 func wsEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +86,7 @@ func wsReader(conn *websocket.Conn) {
 		}
 
 		/*[]byte(`{"ts":"1677354485344000", "gyro" : {"z":3.3425002, "x":2.66, "y": 0.67375004}}`)*/
-		Report(udpServer, motionTimestamp, zeroVector3, report.Gyro)
+		Report(udpServer, motionTimestamp, controller.ZeroVector3, report.Gyro)
 		//
 		//if err := conn.WriteMessage(messageType, p); err != nil {
 		//	log.Println(err)
@@ -163,87 +107,57 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 
 func handleUDP(udpServer net.PacketConn) {
 	data := make([]byte, 512)
+	var prot controller.DSUProtocol
 	for {
 
-		_, addr, err := udpServer.ReadFrom(data)
+		readLength, addr, err := udpServer.ReadFrom(data)
 		if err != nil {
 			continue
 		}
 
-		length := len(data)
+		// length := len(data)
 
 		//fmt.Printf("Received %d bytes, elapsed %v, expected %v\n", length)
 
-		if length == 0 {
+		if readLength == 0 {
 			fmt.Printf("Empty receive\n")
 			continue
 		}
 
-		index := 4                                              // for now skip header
-		index += 2                                              // skip protocol
-		index += 2                                              // skip packetSize
-		index += 4                                              // skip crc
-		index += 4                                              // skip client id
-		messageType := binary.LittleEndian.Uint32(data[index:]) // care only about message type
-		index += 4
+		prot.ReadRequest(data)
 
-		if messageType == DSUC_VersionReq {
+		// index := 4                                              // for now skip header
+		// index += 2                                              // skip protocol
+		// index += 2                                              // skip packetSize
+		// index += 4                                              // skip crc
+		// index += 4                                              // skip client id
+		// messageType := binary.LittleEndian.Uint32(data[index:]) // care only about message type
+		// index += 4
+
+		if prot.MessageType == controller.DSUC_VersionReq {
 			//fmt.Printf("Version request\n")
-		} else if messageType == DSUC_ListPorts {
+		} else if prot.MessageType == controller.DSUC_ListPorts {
 			fmt.Printf("List ports\n")
-			numOfPadRequests := int(binary.LittleEndian.Uint32(data[index:]))
-			index += 4
-			for i := 0; i < numOfPadRequests; i += 1 {
-				requestIndex := data[index+i]
+
+			// numOfPadRequests := int(binary.LittleEndian.Uint32(data[index:]))
+			// index += 4
+			for i := 0; i < prot.NumOfPadRequests; i += 1 {
+				requestIndex := prot.RequestIndex[i]
+				//data[index+i]
 				if requestIndex != 0 {
 					continue
 				}
-				outBuffer := make([]byte, 32) // plus 16 for header
-				binary.LittleEndian.PutUint32(outBuffer[16:], DSUS_PortInfo)
-				outIndex := 4
-				outBuffer[outIndex] = 0x00 // slot
-				outIndex += 1
-				outBuffer[outIndex] = 0x02 // state (connected)
-				outIndex += 1
-				outBuffer[outIndex] = 0x02 // model (generic)
-				outIndex += 1
-				outBuffer[outIndex] = 0x01 // connection type (usb)
-				outIndex += 1
 
-				// Set MAC address 00:00:00:00:00:FF
-				for j := 0; j < 5; j += 1 {
-					outBuffer[outIndex] = 0x00
-					outIndex += 1
-				}
-				outBuffer[outIndex] = 0xFF
-				outIndex += 1
+				response := prot.CreateListPortsResponse()
 
-				outBuffer[outIndex] = 0xEF // battery (charged)
-				outIndex += 1
-				outBuffer[outIndex] = 0 // n/a
-				outIndex += 1
-
-				go SendPacket(udpServer, addr, outBuffer)
+				go udpServer.WriteTo(response, addr)
 			}
-		} else if messageType == DSUC_PadDataReq {
-			flags := data[index]
-			index += 1
-			idToRRegister := data[index]
-			index += 1
-			macToRegisterBuf := make([]string, 6)
-			for i := 0; i < 6; i += 1 {
-				if data[index] >= 15 {
-					macToRegisterBuf[i] = hex.EncodeToString(data[index : index+1])
-				} else {
-					macToRegisterBuf[i] = "00"
-				}
-				index += 1
-			}
-			macToRegister := strings.Join(macToRegisterBuf, ":")
+		} else if prot.MessageType == controller.DSUC_PadDataReq {
+
 			//fmt.Printf("Pad data request for %s with flags %d and id %d\n", macToRegister, flags,
 			//	idToRRegister)
-			if (flags == 0 || (idToRRegister == 0 && (flags&0x01) != 0)) ||
-				((macToRegister == "00:00:00:00:00:ff") && (flags&0x02) != 0) {
+			if (prot.Flags == 0 || (prot.IdToRRegister == 0 && (prot.Flags&0x01) != 0)) ||
+				((prot.MacToRegister == "00:00:00:00:00:ff") && (prot.Flags&0x02) != 0) {
 				lastRequestAt = time.Now().UnixMilli()
 				if connectedClient == nil {
 					fmt.Printf("Game connected from %v at %d\n", addr, lastRequestAt)
@@ -287,7 +201,7 @@ func main() {
 
 }
 
-func Report(udpServer net.PacketConn, motionTimestamp uint64, accelerometer Vector3, gyro Vector3) {
+func Report(udpServer net.PacketConn, motionTimestamp uint64, accelerometer controller.Vector3, gyro controller.Vector3) {
 	client := connectedClient
 	if client == nil {
 		return
@@ -305,128 +219,29 @@ func Report(udpServer net.PacketConn, motionTimestamp uint64, accelerometer Vect
 	//	return
 	//}
 
-	outBuffer := make([]byte, 100)
-	BeginPacket(outBuffer)
-	outIndex := 16
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], DSUS_PadDataRsp)
-	outIndex += 4
-
-	outBuffer[outIndex] = 0x00 // pad id
-	outIndex += 1
-	outBuffer[outIndex] = 0x02 // state (connected)
-	outIndex += 1
-	outBuffer[outIndex] = 0x02 // model (generic)
-	outIndex += 1
-	outBuffer[outIndex] = 0x01 // connection type (usb)
-	outIndex += 1
-
-	for j := 0; j < 5; j += 1 {
-		outBuffer[outIndex] = 0x00
-		outIndex += 1
-	}
-	outBuffer[outIndex] = 0xFF
-	outIndex += 1
-
-	outBuffer[outIndex] = 0xEF // battery (charged)
-	outIndex += 1
-	outBuffer[outIndex] = 0x01 // is active (true)
-	outIndex += 1
-
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], packetCounter)
-	packetCounter += 1
-	outIndex += 4
-
-	outBuffer[outIndex] = userController.GetDPadMask() // D-Pad Left, D-Pad Down, D-Pad Right, D-Pad Up, Options (?), R3, L3, Share (?)
-	outIndex += 1
-	outBuffer[outIndex] = userController.GetButtonMask() // Y, B, A, X, R1, L1, R2, L2
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // HOME Button (0 or 1)
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Touch Button (0 or 1)
-	outIndex += 1
-
-	outBuffer[outIndex] = 0x80 // Left stick X (plus rightward)
-	outIndex += 1
-	outBuffer[outIndex] = 0x80 // Left stick Y (plus upward)
-	outIndex += 1
-	outBuffer[outIndex] = 0x80 // Right stick X (plus rightward)
-	outIndex += 1
-	outBuffer[outIndex] = 0x80 // Right stick Y (plus upward)
-	outIndex += 1
-
-	outBuffer[outIndex] = 0x00 // Analog D-Pad Left
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog D-Pad Down
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog D-Pad Right
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog D-Pad Up
-	outIndex += 1
-
-	outBuffer[outIndex] = 0x00 // Analog Y
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog B
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog A
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog X
-	outIndex += 1
-
-	outBuffer[outIndex] = 0x00 // Analog R1
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog L1
-	outIndex += 1
-
-	outBuffer[outIndex] = 0x00 // Analog R2
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // Analog L2
-	outIndex += 1
-
-	outBuffer[outIndex] = 0x00 // First touch (inactive)
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // First touch id
-	outIndex += 1
-	binary.LittleEndian.PutUint16(outBuffer[outIndex:], 0x0000) // trackpad first x
-	outIndex += 2
-	binary.LittleEndian.PutUint16(outBuffer[outIndex:], 0x0000) // trackpad first y
-	outIndex += 2
-
-	outBuffer[outIndex] = 0x00 // trackpad second is active (false)
-	outIndex += 1
-	outBuffer[outIndex] = 0x00 // trackpad second id
-	outIndex += 1
-	binary.LittleEndian.PutUint16(outBuffer[outIndex:], 0x0000) // trackpad second x
-	outIndex += 2
-	binary.LittleEndian.PutUint16(outBuffer[outIndex:], 0x0000) // trackpad second y
-	outIndex += 2
-	//
-
-	binary.LittleEndian.PutUint64(outBuffer[outIndex:], motionTimestamp)
-	//binary.LittleEndian.PutUint64(outBuffer[outIndex:], report.Ts)
-	outIndex += 8
-
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], math.Float32bits(zeroVector3.X)) // x
-	outIndex += 4
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], math.Float32bits(zeroVector3.Y)) // y
-	outIndex += 4
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], math.Float32bits(zeroVector3.Z)) // z
-	outIndex += 4
-
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], math.Float32bits(gyro.X)) // x
-	outIndex += 4
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], math.Float32bits(gyro.Y)) // y
-	outIndex += 4
-	binary.LittleEndian.PutUint32(outBuffer[outIndex:], math.Float32bits(gyro.Z)) // z
-	outIndex += 4
-
-	FinishPacket(outBuffer)
-
 	//fmt.Printf("Send: %s at %d\n",
 	//	hex.EncodeToString(outBuffer), motionTimestamp)
 
 	//fmt.Printf("Send package to %s at %d\n", client, lastRequestAt)
 
-	udpServer.WriteTo(outBuffer, client)
+	var prot controller.DSUProtocol
+
+	response := prot.CreateControllerResponse(&userController, motionTimestamp, gyro)
+
+	go udpServer.WriteTo(response, client)
+}
+
+// Study what was pressed and trigger action if it is in our scope of interest
+func whenHappened(event hook.Event, eventType uint8, action func(), expectations ...controller.KeyCode) bool {
+	if event.Kind == eventType {
+		for _, e := range expectations {
+			if e.RawCode == event.Rawcode {
+				action()
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
@@ -462,7 +277,7 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			//	Report(udpServer, yaw, pitch, time.Now().UnixMilli())
 			//}
 
-			var gyro = Vector3{0.0, sensitivity * pitch, sensitivity * -yaw}
+			var gyro = controller.Vector3{0.0, sensitivity * pitch, sensitivity * -yaw}
 
 			if mouseSwitch {
 				sx, sy := robot.GetScreenSize()
@@ -471,33 +286,57 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			}
 
 			if webSocketClient != nil {
-				webSocketClient.WriteJSON(Vector3{0.0,
+				webSocketClient.WriteJSON(controller.Vector3{0.0,
 					float32(ev.X), float32(ev.Y)})
 			}
 
-			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, gyro)
+			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, gyro)
 
 			// fmt.Printf("\nMouse move: %d %d\n", x, y)
 
 		} else if ev.Kind == hook.KeyUp {
 
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressDPad(controller.LEFT_DPAD, false)
+			}, controller.CHAR_A, controller.LeftArrow)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressDPad(controller.DOWN_DPAD, false)
+			}, controller.CHAR_S, controller.DownArrow)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressDPad(controller.RIGHT_DPAD, false)
+			}, controller.CHAR_D, controller.RightArrow)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressDPad(controller.UP_DPAD, false)
+			}, controller.CHAR_W, controller.UpArrow)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressButton(controller.A_BUTTON, false)
+			}, controller.Return)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressButton(controller.B_BUTTON, false)
+			}, controller.ISO_Section, controller.Escape, controller.Delete)
+
 			key := controller.Raw2Keycode[ev.Rawcode]
 
-			if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
-				userController.PressDPad(controller.LEFT_DPAD, false)
-			} else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
-				userController.PressDPad(controller.DOWN_DPAD, false)
-			} else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
-				userController.PressDPad(controller.RIGHT_DPAD, false)
-			} else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
-				userController.PressDPad(controller.UP_DPAD, false)
-			} else if ev.Rawcode == controller.Return.RawCode {
-				userController.PressButton(controller.A_BUTTON, false)
-			} else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
-				userController.PressButton(controller.B_BUTTON, false)
-			}
+			// if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
+			// 	userController.PressDPad(controller.LEFT_DPAD, false)
+			// } else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
+			// 	userController.PressDPad(controller.DOWN_DPAD, false)
+			// } else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
+			// 	userController.PressDPad(controller.RIGHT_DPAD, false)
+			// } else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
+			// 	userController.PressDPad(controller.UP_DPAD, false)
+			// } else if ev.Rawcode == controller.Return.RawCode {
+			// 	userController.PressButton(controller.A_BUTTON, false)
+			// } else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
+			// 	userController.PressButton(controller.B_BUTTON, false)
+			// }
 
-			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, zeroVector3)
+			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 
 			// fmt.Printf("\nKey up: %x\n", userController.GetDPadMask())
 
@@ -512,21 +351,45 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 		} else if ev.Kind == hook.KeyHold {
 			// key := controller.Raw2Keycode[ev.Rawcode]
 
-			if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
+			whenHappened(ev, hook.KeyHold, func() {
 				userController.PressDPad(controller.LEFT_DPAD, true)
-			} else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
-				userController.PressDPad(controller.DOWN_DPAD, true)
-			} else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
-				userController.PressDPad(controller.RIGHT_DPAD, true)
-			} else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
-				userController.PressDPad(controller.UP_DPAD, true)
-			} else if ev.Rawcode == controller.Return.RawCode {
-				userController.PressButton(controller.A_BUTTON, true)
-			} else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
-				userController.PressButton(controller.B_BUTTON, true)
-			}
+			}, controller.CHAR_A, controller.LeftArrow)
 
-			Report(udpServer, uint64(time.Now().UnixMicro()), zeroVector3, zeroVector3)
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressDPad(controller.DOWN_DPAD, true)
+			}, controller.CHAR_S, controller.DownArrow)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressDPad(controller.RIGHT_DPAD, true)
+			}, controller.CHAR_D, controller.RightArrow)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressDPad(controller.UP_DPAD, true)
+			}, controller.CHAR_W, controller.UpArrow)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressButton(controller.A_BUTTON, true)
+			}, controller.Return)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressButton(controller.B_BUTTON, true)
+			}, controller.ISO_Section, controller.Escape, controller.Delete)
+
+			// if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
+			// 	userController.PressDPad(controller.LEFT_DPAD, true)
+			// } else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
+			// 	userController.PressDPad(controller.DOWN_DPAD, true)
+			// } else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
+			// 	userController.PressDPad(controller.RIGHT_DPAD, true)
+			// } else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
+			// 	userController.PressDPad(controller.UP_DPAD, true)
+			// } else if ev.Rawcode == controller.Return.RawCode {
+			// 	userController.PressButton(controller.A_BUTTON, true)
+			// } else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
+			// 	userController.PressButton(controller.B_BUTTON, true)
+			// }
+
+			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 
 			// fmt.Printf("\nKey hold: %d %d\n", userController.GetDPadMask(), userController.IsDPadPressed(controller.LEFT_DPAD))
 			//	fmt.Printf("key hold: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
