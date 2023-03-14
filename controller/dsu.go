@@ -14,6 +14,17 @@ type Vector3 struct {
 	Y float32 `json:"y"`
 }
 
+var ZeroVector3 = Vector3{0.0, 0.0, 0.0}
+
+const (
+	DSUC_VersionReq = 0x100000
+	DSUS_VersionRsp = 0x100000
+	DSUC_ListPorts  = 0x100001
+	DSUS_PortInfo   = 0x100001
+	DSUC_PadDataReq = 0x100002
+	DSUS_PadDataRsp = 0x100002
+)
+
 const MaxProtocolVer = 1001
 const ServerID = 1423567
 
@@ -64,6 +75,7 @@ func (p *DSUProtocol) ReadRequest(data []byte) {
 func (p *DSUProtocol) CreateListPortsResponse() []byte {
 
 	outBuffer := make([]byte, 32) // plus 16 for header
+	createPacketHeader(outBuffer)
 	binary.LittleEndian.PutUint32(outBuffer[16:], DSUS_PortInfo)
 	outIndex := 4
 	outBuffer[outIndex] = 0x00 // slot
@@ -88,7 +100,6 @@ func (p *DSUProtocol) CreateListPortsResponse() []byte {
 	outBuffer[outIndex] = 0 // n/a
 	outIndex += 1
 
-	createPacketHeader(outBuffer)
 	calculateChecksum(outBuffer)
 	return outBuffer
 
@@ -215,17 +226,6 @@ func (p *DSUProtocol) CreateControllerResponse(userController *ControllerState, 
 	return outBuffer
 }
 
-var ZeroVector3 = Vector3{0.0, 0.0, 0.0}
-
-const (
-	DSUC_VersionReq = 0x100000
-	DSUS_VersionRsp = 0x100000
-	DSUC_ListPorts  = 0x100001
-	DSUS_PortInfo   = 0x100001
-	DSUC_PadDataReq = 0x100002
-	DSUS_PadDataRsp = 0x100002
-)
-
 func createPacketHeader(data []byte) {
 
 	copy(data, "DSUS")
@@ -251,9 +251,3 @@ func calculateChecksum(data []byte) {
 	checksum := crc32.Checksum(data, table)
 	binary.LittleEndian.PutUint32(data[8:], checksum)
 }
-
-// func SendPacket(udpServer net.PacketConn, addr net.Addr, buffer []byte) {
-// 	createPacketHeader(buffer)
-// 	calculateChecksum(buffer)
-// 	udpServer.WriteTo(buffer, addr)
-// }
