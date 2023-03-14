@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/rand"
 	"mouse-and-keyboard-for-cemu/controller"
@@ -42,7 +41,7 @@ func main() {
 	// time.Now().UnixMilli()
 	//binary.LittleEndian.PutUint32(outBuffer, math.Float32bits(-123.45))
 	//binary.LittleEndian.PutUint64(outBuffer, uint64(now))
-	//fmt.Printf("Wrote %s %d %d\n", hex.EncodeToString(outBuffer), time.Now().UnixMicro(), now)
+	//log.Printf("Wrote %s %d %d\n", hex.EncodeToString(outBuffer), time.Now().UnixMicro(), now)
 	rand.Seed(time.Now().UnixNano())
 
 	us, err := net.ListenPacket("udp", ":26760")
@@ -60,7 +59,10 @@ func main() {
 			http.ServeFile(w, r, "index.html")
 		})
 		http.HandleFunc("/ws", webSocketEndpoint)
-		log.Fatal(http.ListenAndServe(":8080", nil))
+		err := http.ListenAndServe(":8080", nil)
+		if err != nil {
+			panic(err)
+		}
 	}()
 
 	chanHook := hook.Start()
@@ -84,16 +86,16 @@ func receiveUDPLoop(udpServer net.PacketConn) {
 		}
 
 		if readLength == 0 {
-			fmt.Printf("Empty receive\n")
+			log.Printf("Empty receive\n")
 			continue
 		}
 
 		prot.ReadRequest(data)
 
 		if prot.MessageType == controller.DSUC_VersionReq {
-			fmt.Printf("Version request, ignoring\n")
+			log.Printf("Version request, ignoring\n")
 		} else if prot.MessageType == controller.DSUC_ListPorts {
-			fmt.Printf("Get state of %d port(s)\n", prot.NumOfPadRequests)
+			log.Printf("Get state of %d port(s)\n", prot.NumOfPadRequests)
 			for i := 0; i < prot.NumOfPadRequests; i += 1 {
 				requestIndex := prot.RequestIndex[i]
 				if requestIndex != 0 {
@@ -105,13 +107,13 @@ func receiveUDPLoop(udpServer net.PacketConn) {
 				go udpServer.WriteTo(response, addr)
 			}
 		} else if prot.MessageType == controller.DSUC_PadDataReq {
-			//fmt.Printf("Pad data request for %s with flags %d and id %d\n", macToRegister, flags,
+			//log.Printf("Pad data request for %s with flags %d and id %d\n", macToRegister, flags,
 			//	idToRRegister)
 			if (prot.Flags == 0 || (prot.IdToRRegister == 0 && (prot.Flags&0x01) != 0)) ||
 				((prot.MacToRegister == "00:00:00:00:00:ff") && (prot.Flags&0x02) != 0) {
 				lastRequestAt = time.Now().UnixMilli()
 				if connectedClient == nil {
-					fmt.Printf("Game connected from %v at %d\n", addr, lastRequestAt)
+					log.Printf("Game connected from %v at %d\n", addr, lastRequestAt)
 				}
 				connectedClient = addr
 			}
@@ -127,21 +129,21 @@ func Report(udpServer net.PacketConn, motionTimestamp uint64, accelerometer cont
 	}
 
 	if time.Now().UnixMilli()-lastRequestAt > clientTimeoutLimit {
-		fmt.Printf("Game timeout %s, disconnecting\n", client)
+		log.Printf("Game timeout %s, disconnecting\n", client)
 		connectedClient = nil
 		return
 	}
 
-	//fmt.Printf("Unmarshalled %v\n", report)
+	//log.Printf("Unmarshalled %v\n", report)
 
 	//if report.Ts == "" {
 	//	return
 	//}
 
-	//fmt.Printf("Send: %s at %d\n",
+	//log.Printf("Send: %s at %d\n",
 	//	hex.EncodeToString(outBuffer), motionTimestamp)
 
-	//fmt.Printf("Send package to %s at %d\n", client, lastRequestAt)
+	//log.Printf("Send package to %s at %d\n", client, lastRequestAt)
 
 	var prot controller.DSUProtocol
 
@@ -190,10 +192,10 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			// 1440 x 900
 
 			//if yaw == 0.0 && pitch == 0.0 {
-			//	fmt.Printf("Skip %d\n", packetCounter)
+			//	log.Printf("Skip %d\n", packetCounter)
 			//	Report(udpServer, 0, 0, 0)
 			//} else {
-			//	fmt.Printf("Pos: %d %d %d\n", yaw, pitch, packetCounter)
+			//	log.Printf("Pos: %d %d %d\n", yaw, pitch, packetCounter)
 			//	Report(udpServer, yaw, pitch, time.Now().UnixMilli())
 			//}
 
@@ -202,7 +204,7 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			if mouseSwitch {
 				sx, sy := robot.GetScreenSize()
 				robot.Move(sx/2, sy/2)
-				//fmt.Printf("Mouse event: %v\n", gyro)
+				//log.Printf("Mouse event: %v\n", gyro)
 			}
 
 			if webSocketClient != nil {
@@ -212,7 +214,7 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, gyro)
 
-			// fmt.Printf("\nMouse move: %d %d\n", x, y)
+			// log.Printf("\nMouse move: %d %d\n", x, y)
 
 		} else if ev.Kind == hook.KeyUp {
 
@@ -258,16 +260,16 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 
-			// fmt.Printf("\nKey up: %x\n", userController.GetDPadMask())
+			// log.Printf("\nKey up: %x\n", userController.GetDPadMask())
 
-			fmt.Printf("\nKey Up: %s %d\n", key.Name, ev.Rawcode)
+			log.Printf("\nKey Up: %s %d\n", key.Name, ev.Rawcode)
 
-			//	fmt.Printf("key up: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
+			//	log.Printf("key up: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
 			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
 			//} else if ev.Kind == hook.KeyDown {
 			//	key := controller.Raw2Keycode[ev.Rawcode]
 			//
-			//	fmt.Printf("\nKey down: %s %d\n", key.Name, ev.Rawcode)
+			//	log.Printf("\nKey down: %s %d\n", key.Name, ev.Rawcode)
 		} else if ev.Kind == hook.KeyHold {
 			// key := controller.Raw2Keycode[ev.Rawcode]
 
@@ -311,26 +313,26 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 
-			// fmt.Printf("\nKey hold: %d %d\n", userController.GetDPadMask(), userController.IsDPadPressed(controller.LEFT_DPAD))
-			//	fmt.Printf("key hold: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
+			// log.Printf("\nKey hold: %d %d\n", userController.GetDPadMask(), userController.IsDPadPressed(controller.LEFT_DPAD))
+			//	log.Printf("key hold: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
 			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
 		} else if ev.Kind == hook.MouseDown {
 			// button := ev.Button
-			// fmt.Printf("\nMouse down: %d\n", button)
+			// log.Printf("\nMouse down: %d\n", button)
 		} else if ev.Kind == hook.MouseUp {
 			// button := ev.Button
-			// fmt.Printf("\nMouse up: %d\n", button)
+			// log.Printf("\nMouse up: %d\n", button)
 		} else if ev.Kind == hook.MouseHold {
 			// button := ev.Button
-			// fmt.Printf("\nMouse hold: %d\n", button)
+			// log.Printf("\nMouse hold: %d\n", button)
 		}
 		//else if ev.Kind == hook.MouseMove {
 		//	y, x := ev.Y, ev.X
-		//	fmt.Printf("\nMouse move: %d %d\n", x, y)
+		//	log.Printf("\nMouse move: %d %d\n", x, y)
 		//}
 		//else if ev.Kind == hook.MouseDrag {
 		//	button := ev.Button
-		//	fmt.Printf("\nMouse drag: %d\n", button)
+		//	log.Printf("\nMouse drag: %d\n", button)
 		//}
 	}
 }
@@ -350,9 +352,9 @@ func webSocketEndpoint(w http.ResponseWriter, r *http.Request) {
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		panic(err)
 	}
-	fmt.Printf("Web client connected\n")
+	log.Printf("Web client connected\n")
 	webSocketClient = ws
 	// webSocketReader(ws)
 }
@@ -370,11 +372,11 @@ func webSocketReader(conn *websocket.Conn) {
 		var elapsed = now - then
 
 		if elapsed <= fpsInterval {
-			fmt.Printf("Too fast %d, expected %d\n", elapsed, fpsInterval)
+			log.Printf("Too fast %d, expected %d\n", elapsed, fpsInterval)
 			continue
 		}
 
-		//fmt.Printf("OK %d, expected %d\n", elapsed, fpsInterval)
+		//log.Printf("OK %d, expected %d\n", elapsed, fpsInterval)
 
 		then = now - (elapsed % fpsInterval)
 
@@ -389,7 +391,7 @@ func webSocketReader(conn *websocket.Conn) {
 
 		motionTimestamp, err := strconv.ParseUint(report.Ts, 10, 64)
 		if err != nil {
-			fmt.Printf("Error %v\n", err)
+			log.Printf("Error %v\n", err)
 			return
 		}
 
