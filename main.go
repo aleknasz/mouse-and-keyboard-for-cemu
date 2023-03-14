@@ -25,7 +25,6 @@ var connectedClient net.Addr = nil
 
 var webSocketClient *websocket.Conn = nil
 
-// var report PhoneReport
 var udpServer net.PacketConn
 
 var frameCount = 0
@@ -34,78 +33,47 @@ var fpsInterval = 1000 / fps
 var then = time.Now().UnixMilli()
 var startTime = then
 
-type PhoneReport struct {
-	Ts   string             `json:"ts"`
-	Gyro controller.Vector3 `json:"gyro"`
-}
+// Just setup key events listener and udp server for DSU protocol
+// Also there is some legacy logic for little web site serving and motion control receiving from android device
+func main() {
 
-func wsEndpoint(w http.ResponseWriter, r *http.Request) {
-	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	ws, err := upgrader.Upgrade(w, r, nil)
+	//var outBuffer = make([]byte, 100)
+	//now := 1677329375368994 //time.Now().UnixMicro()
+	// time.Now().UnixMilli()
+	//binary.LittleEndian.PutUint32(outBuffer, math.Float32bits(-123.45))
+	//binary.LittleEndian.PutUint64(outBuffer, uint64(now))
+	//fmt.Printf("Wrote %s %d %d\n", hex.EncodeToString(outBuffer), time.Now().UnixMicro(), now)
+	rand.Seed(time.Now().UnixNano())
+
+	us, err := net.ListenPacket("udp", ":26760")
 	if err != nil {
-		log.Println(err)
+		panic(err)
 	}
-	fmt.Printf("Web clinet connected\n")
-	webSocketClient = ws
+	udpServer = us
+	defer udpServer.Close()
+
+	// This was previously used for getting motion control from Android Phone
+	// Recently was used to send debug information back to Android Phone
+	// But now, we are enough mature to disable that at all since Phone is not needed anymore (for motion or debugging)
+	go func() {
+		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, "index.html")
+		})
+		http.HandleFunc("/ws", webSocketEndpoint)
+		log.Fatal(http.ListenAndServe(":8080", nil))
+	}()
+
+	chanHook := hook.Start()
+	defer hook.End()
+
+	go keyEventsLoop(udpServer, chanHook)
+
+	receiveUDPLoop(udpServer)
+
 }
 
-func wsReader(conn *websocket.Conn) {
-	for {
-		// read in a message
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		var now = time.Now().UnixMilli()
-		var elapsed = now - then
-
-		if elapsed <= fpsInterval {
-			fmt.Printf("Too fast %d, expected %d\n", elapsed, fpsInterval)
-			continue
-		}
-
-		//fmt.Printf("OK %d, expected %d\n", elapsed, fpsInterval)
-
-		then = now - (elapsed % fpsInterval)
-
-		// print out that message for clarity
-
-		var report PhoneReport
-		err = json.Unmarshal(data, &report)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		motionTimestamp, err := strconv.ParseUint(report.Ts, 10, 64)
-		if err != nil {
-			fmt.Printf("Error %v\n", err)
-			return
-		}
-
-		/*[]byte(`{"ts":"1677354485344000", "gyro" : {"z":3.3425002, "x":2.66, "y": 0.67375004}}`)*/
-		Report(udpServer, motionTimestamp, controller.ZeroVector3, report.Gyro)
-		//
-		//if err := conn.WriteMessage(messageType, p); err != nil {
-		//	log.Println(err)
-		//	return
-		//}
-
-	}
-}
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
-func homePage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "index.html")
-}
-
-func handleUDP(udpServer net.PacketConn) {
+// This processes all the request coming from game
+func receiveUDPLoop(udpServer net.PacketConn) {
 	data := make([]byte, 512)
 	var prot controller.DSUProtocol
 	for {
@@ -115,10 +83,6 @@ func handleUDP(udpServer net.PacketConn) {
 			continue
 		}
 
-		// length := len(data)
-
-		//fmt.Printf("Received %d bytes, elapsed %v, expected %v\n", length)
-
 		if readLength == 0 {
 			fmt.Printf("Empty receive\n")
 			continue
@@ -126,24 +90,12 @@ func handleUDP(udpServer net.PacketConn) {
 
 		prot.ReadRequest(data)
 
-		// index := 4                                              // for now skip header
-		// index += 2                                              // skip protocol
-		// index += 2                                              // skip packetSize
-		// index += 4                                              // skip crc
-		// index += 4                                              // skip client id
-		// messageType := binary.LittleEndian.Uint32(data[index:]) // care only about message type
-		// index += 4
-
 		if prot.MessageType == controller.DSUC_VersionReq {
-			//fmt.Printf("Version request\n")
+			fmt.Printf("Version request, ignoring\n")
 		} else if prot.MessageType == controller.DSUC_ListPorts {
-			fmt.Printf("List ports\n")
-
-			// numOfPadRequests := int(binary.LittleEndian.Uint32(data[index:]))
-			// index += 4
+			fmt.Printf("Get state of %d port(s)\n", prot.NumOfPadRequests)
 			for i := 0; i < prot.NumOfPadRequests; i += 1 {
 				requestIndex := prot.RequestIndex[i]
-				//data[index+i]
 				if requestIndex != 0 {
 					continue
 				}
@@ -153,7 +105,6 @@ func handleUDP(udpServer net.PacketConn) {
 				go udpServer.WriteTo(response, addr)
 			}
 		} else if prot.MessageType == controller.DSUC_PadDataReq {
-
 			//fmt.Printf("Pad data request for %s with flags %d and id %d\n", macToRegister, flags,
 			//	idToRRegister)
 			if (prot.Flags == 0 || (prot.IdToRRegister == 0 && (prot.Flags&0x01) != 0)) ||
@@ -168,39 +119,7 @@ func handleUDP(udpServer net.PacketConn) {
 	}
 }
 
-func main() {
-
-	//var outBuffer = make([]byte, 100)
-	//now := 1677329375368994 //time.Now().UnixMicro()
-	// time.Now().UnixMilli()
-	//binary.LittleEndian.PutUint32(outBuffer, math.Float32bits(-123.45))
-	//binary.LittleEndian.PutUint64(outBuffer, uint64(now))
-	//fmt.Printf("Wrote %s %d %d\n", hex.EncodeToString(outBuffer), time.Now().UnixMicro(), now)
-
-	us, err := net.ListenPacket("udp", ":26760")
-	if err != nil {
-		panic(err)
-	}
-	udpServer = us
-	defer udpServer.Close()
-
-	go func() {
-		http.HandleFunc("/", homePage)
-		http.HandleFunc("/ws", wsEndpoint)
-		log.Fatal(http.ListenAndServe(":8080", nil))
-	}()
-
-	rand.Seed(time.Now().UnixNano())
-
-	chanHook := hook.Start()
-	defer hook.End()
-
-	go captureEvents(udpServer, chanHook)
-
-	handleUDP(udpServer)
-
-}
-
+// Send back status of our controller
 func Report(udpServer net.PacketConn, motionTimestamp uint64, accelerometer controller.Vector3, gyro controller.Vector3) {
 	client := connectedClient
 	if client == nil {
@@ -244,7 +163,8 @@ func whenHappened(event hook.Event, eventType uint8, action func(), expectations
 	return false
 }
 
-func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
+// Some key or button has been pressed or mouse has been moved
+func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 	var prevX, prevY int16 = -1, -1
 	var sensitivity float32 = 25.0
 	var mouseSwitch bool = false
@@ -412,5 +332,74 @@ func captureEvents(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 		//	button := ev.Button
 		//	fmt.Printf("\nMouse drag: %d\n", button)
 		//}
+	}
+}
+
+// TODO: All below to be removed
+
+type PhoneReport struct {
+	Ts   string             `json:"ts"`
+	Gyro controller.Vector3 `json:"gyro"`
+}
+
+func webSocketEndpoint(w http.ResponseWriter, r *http.Request) {
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Printf("Web client connected\n")
+	webSocketClient = ws
+	// webSocketReader(ws)
+}
+
+func webSocketReader(conn *websocket.Conn) {
+	for {
+		// read in a message
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		var now = time.Now().UnixMilli()
+		var elapsed = now - then
+
+		if elapsed <= fpsInterval {
+			fmt.Printf("Too fast %d, expected %d\n", elapsed, fpsInterval)
+			continue
+		}
+
+		//fmt.Printf("OK %d, expected %d\n", elapsed, fpsInterval)
+
+		then = now - (elapsed % fpsInterval)
+
+		// print out that message for clarity
+
+		var report PhoneReport
+		err = json.Unmarshal(data, &report)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		motionTimestamp, err := strconv.ParseUint(report.Ts, 10, 64)
+		if err != nil {
+			fmt.Printf("Error %v\n", err)
+			return
+		}
+
+		/*[]byte(`{"ts":"1677354485344000", "gyro" : {"z":3.3425002, "x":2.66, "y": 0.67375004}}`)*/
+		Report(udpServer, motionTimestamp, controller.ZeroVector3, report.Gyro)
+		//
+		//if err := conn.WriteMessage(messageType, p); err != nil {
+		//	log.Println(err)
+		//	return
+		//}
+
 	}
 }
