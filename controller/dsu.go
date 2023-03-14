@@ -147,13 +147,13 @@ func (p *DSUProtocol) CreateControllerResponse(userController *ControllerState, 
 	outBuffer[outIndex] = 0x00 // Touch Button (0 or 1)
 	outIndex += 1
 
-	outBuffer[outIndex] = 0x80 // Left stick X (plus rightward)
+	outBuffer[outIndex] = userController.GetStickMask(L_STICK, X_AXIS) // Left stick X (plus rightward)
 	outIndex += 1
-	outBuffer[outIndex] = 0x80 // Left stick Y (plus upward)
+	outBuffer[outIndex] = userController.GetStickMask(L_STICK, Y_AXIS) // Left stick Y (plus upward)
 	outIndex += 1
-	outBuffer[outIndex] = 0x80 // Right stick X (plus rightward)
+	outBuffer[outIndex] = userController.GetStickMask(R_STICK, X_AXIS) // Right stick X (plus rightward)
 	outIndex += 1
-	outBuffer[outIndex] = 0x80 // Right stick Y (plus upward)
+	outBuffer[outIndex] = userController.GetStickMask(R_STICK, Y_AXIS) // Right stick Y (plus upward)
 	outIndex += 1
 
 	outBuffer[outIndex] = 0x00 // Analog D-Pad Left

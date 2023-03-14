@@ -50,18 +50,42 @@ func B2i(b bool) uint8 {
 	return 0
 }
 
+func (state *ControllerState) MoveStick(which int, axis int, value float32) {
+	state.stick[which][axis] = value
+}
+
+func (state *ControllerState) ResetStick(which int, axis int, value float32) {
+	state.stick[which][axis] = 0.0
+}
+
+func (state *ControllerState) GetStickMask(which int, axis int) byte {
+	if state.stick[which][axis] < 0.0 {
+		return 0x00
+	}
+	if state.stick[which][axis] > 0.0 {
+		return 0xFF
+	}
+	return 0x80
+}
+
 func (state *ControllerState) GetButtonMask() uint8 {
 	return ((B2i(state.button_pressed[Y_BUTTON]) << 7) |
 		(B2i(state.button_pressed[B_BUTTON]) << 6) |
 		(B2i(state.button_pressed[A_BUTTON]) << 5) |
-		(B2i(state.button_pressed[X_BUTTON]) << 4))
+		(B2i(state.button_pressed[X_BUTTON]) << 4) |
+		(B2i(state.button_pressed[R_BUTTON]) << 3) |
+		(B2i(state.button_pressed[L_BUTTON]) << 2) |
+		(B2i(state.button_pressed[ZR_BUTTON]) << 1) |
+		(B2i(state.button_pressed[ZL_BUTTON]) << 0))
 }
 
 func (state *ControllerState) GetDPadMask() uint8 {
 	return ((B2i(state.dpad_pressed[LEFT_DPAD]) << 7) |
 		(B2i(state.dpad_pressed[DOWN_DPAD]) << 6) |
 		(B2i(state.dpad_pressed[RIGHT_DPAD]) << 5) |
-		(B2i(state.dpad_pressed[UP_DPAD]) << 4))
+		(B2i(state.dpad_pressed[UP_DPAD]) << 4) |
+		(B2i(state.stick_pressed[R_STICK]) << 2) |
+		(B2i(state.stick_pressed[L_STICK]) << 1))
 }
 
 func (state *ControllerState) PressButton(index int, pressed bool) {

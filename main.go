@@ -219,112 +219,178 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 		} else if ev.Kind == hook.KeyUp {
 
 			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressStick(controller.R_STICK, false)
+			}, controller.DIGIT_5)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressStick(controller.L_STICK, false)
+			}, controller.Command)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressButton(controller.X_BUTTON, false)
+			}, controller.Space)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.MoveStick(controller.L_STICK, controller.X_AXIS, 0.0)
+			}, controller.CHAR_A)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.MoveStick(controller.L_STICK, controller.Y_AXIS, 0.0)
+			}, controller.CHAR_S)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.MoveStick(controller.L_STICK, controller.X_AXIS, 0.0)
+			}, controller.CHAR_D)
+
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.MoveStick(controller.L_STICK, controller.Y_AXIS, 0.0)
+			}, controller.CHAR_W)
+
+			whenHappened(ev, hook.KeyUp, func() {
 				userController.PressDPad(controller.LEFT_DPAD, false)
-			}, controller.CHAR_A, controller.LeftArrow)
+			}, controller.LeftArrow, controller.DIGIT_1)
 
 			whenHappened(ev, hook.KeyUp, func() {
 				userController.PressDPad(controller.DOWN_DPAD, false)
-			}, controller.CHAR_S, controller.DownArrow)
+			}, controller.DownArrow, controller.DIGIT_4)
 
 			whenHappened(ev, hook.KeyUp, func() {
 				userController.PressDPad(controller.RIGHT_DPAD, false)
-			}, controller.CHAR_D, controller.RightArrow)
+			}, controller.RightArrow, controller.DIGIT_3)
 
 			whenHappened(ev, hook.KeyUp, func() {
 				userController.PressDPad(controller.UP_DPAD, false)
-			}, controller.CHAR_W, controller.UpArrow)
+			}, controller.UpArrow, controller.DIGIT_2)
 
 			whenHappened(ev, hook.KeyUp, func() {
 				userController.PressButton(controller.A_BUTTON, false)
-			}, controller.Return)
+			}, controller.Return, controller.CHAR_F)
 
 			whenHappened(ev, hook.KeyUp, func() {
 				userController.PressButton(controller.B_BUTTON, false)
-			}, controller.ISO_Section, controller.Escape, controller.Delete)
+			}, controller.Escape, controller.Delete, controller.Shift)
 
-			key := controller.Raw2Keycode[ev.Rawcode]
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressButton(controller.L_BUTTON, false)
+			}, controller.CHAR_Q)
 
-			// if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
-			// 	userController.PressDPad(controller.LEFT_DPAD, false)
-			// } else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
-			// 	userController.PressDPad(controller.DOWN_DPAD, false)
-			// } else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
-			// 	userController.PressDPad(controller.RIGHT_DPAD, false)
-			// } else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
-			// 	userController.PressDPad(controller.UP_DPAD, false)
-			// } else if ev.Rawcode == controller.Return.RawCode {
-			// 	userController.PressButton(controller.A_BUTTON, false)
-			// } else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
-			// 	userController.PressButton(controller.B_BUTTON, false)
-			// }
+			whenHappened(ev, hook.KeyUp, func() {
+				userController.PressButton(controller.R_BUTTON, false)
+			}, controller.CHAR_E)
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
 
-			// log.Printf("\nKey up: %x\n", userController.GetDPadMask())
-
+			key := controller.Raw2Keycode[ev.Rawcode]
 			log.Printf("\nKey Up: %s %d\n", key.Name, ev.Rawcode)
 
-			//	log.Printf("key up: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
-			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
-			//} else if ev.Kind == hook.KeyDown {
-			//	key := controller.Raw2Keycode[ev.Rawcode]
-			//
-			//	log.Printf("\nKey down: %s %d\n", key.Name, ev.Rawcode)
 		} else if ev.Kind == hook.KeyHold {
 			// key := controller.Raw2Keycode[ev.Rawcode]
 
 			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressStick(controller.R_STICK, true)
+			}, controller.DIGIT_5)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressStick(controller.L_STICK, true)
+			}, controller.Command)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressButton(controller.X_BUTTON, true)
+			}, controller.Space)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.MoveStick(controller.L_STICK, controller.X_AXIS, -1.0)
+			}, controller.CHAR_A)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.MoveStick(controller.L_STICK, controller.Y_AXIS, -1.0)
+			}, controller.CHAR_S)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.MoveStick(controller.L_STICK, controller.X_AXIS, 1.0)
+			}, controller.CHAR_D)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.MoveStick(controller.L_STICK, controller.Y_AXIS, 1.0)
+			}, controller.CHAR_W)
+
+			whenHappened(ev, hook.KeyHold, func() {
 				userController.PressDPad(controller.LEFT_DPAD, true)
-			}, controller.CHAR_A, controller.LeftArrow)
+			}, controller.LeftArrow, controller.DIGIT_1)
 
 			whenHappened(ev, hook.KeyHold, func() {
 				userController.PressDPad(controller.DOWN_DPAD, true)
-			}, controller.CHAR_S, controller.DownArrow)
+			}, controller.DownArrow, controller.DIGIT_4)
 
 			whenHappened(ev, hook.KeyHold, func() {
 				userController.PressDPad(controller.RIGHT_DPAD, true)
-			}, controller.CHAR_D, controller.RightArrow)
+			}, controller.RightArrow, controller.DIGIT_3)
 
 			whenHappened(ev, hook.KeyHold, func() {
 				userController.PressDPad(controller.UP_DPAD, true)
-			}, controller.CHAR_W, controller.UpArrow)
+			}, controller.UpArrow, controller.DIGIT_2)
 
 			whenHappened(ev, hook.KeyHold, func() {
 				userController.PressButton(controller.A_BUTTON, true)
-			}, controller.Return)
+			}, controller.Return, controller.CHAR_F)
 
 			whenHappened(ev, hook.KeyHold, func() {
 				userController.PressButton(controller.B_BUTTON, true)
-			}, controller.ISO_Section, controller.Escape, controller.Delete)
+			}, controller.Escape, controller.Delete, controller.Shift)
 
-			// if ev.Rawcode == controller.CHAR_A.RawCode || ev.Rawcode == controller.LeftArrow.RawCode {
-			// 	userController.PressDPad(controller.LEFT_DPAD, true)
-			// } else if ev.Rawcode == controller.CHAR_S.RawCode || ev.Rawcode == controller.DownArrow.RawCode {
-			// 	userController.PressDPad(controller.DOWN_DPAD, true)
-			// } else if ev.Rawcode == controller.CHAR_D.RawCode || ev.Rawcode == controller.RightArrow.RawCode {
-			// 	userController.PressDPad(controller.RIGHT_DPAD, true)
-			// } else if ev.Rawcode == controller.CHAR_W.RawCode || ev.Rawcode == controller.UpArrow.RawCode {
-			// 	userController.PressDPad(controller.UP_DPAD, true)
-			// } else if ev.Rawcode == controller.Return.RawCode {
-			// 	userController.PressButton(controller.A_BUTTON, true)
-			// } else if ev.Rawcode == controller.ISO_Section.RawCode || ev.Rawcode == controller.Escape.RawCode {
-			// 	userController.PressButton(controller.B_BUTTON, true)
-			// }
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressButton(controller.L_BUTTON, true)
+			}, controller.CHAR_Q)
+
+			whenHappened(ev, hook.KeyHold, func() {
+				userController.PressButton(controller.R_BUTTON, true)
+			}, controller.CHAR_E)
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
+
+			key := controller.Raw2Keycode[ev.Rawcode]
+			log.Printf("\nKey hold: %s %d\n", key.Name, ev.Rawcode)
 
 			// log.Printf("\nKey hold: %d %d\n", userController.GetDPadMask(), userController.IsDPadPressed(controller.LEFT_DPAD))
 			//	log.Printf("key hold: rawcode=%d rawcode=0x%x keycode=%d keycode=0x%x keychar=%d keychar=0x%x\n\n",
 			//		ev.Rawcode, ev.Rawcode, ev.Keycode, ev.Keycode, ev.Keychar, ev.Keychar)
 		} else if ev.Kind == hook.MouseDown {
-			// button := ev.Button
-			// log.Printf("\nMouse down: %d\n", button)
+			button := ev.Button
+
+			log.Printf("\nMouse down: %d\n", button)
 		} else if ev.Kind == hook.MouseUp {
-			// button := ev.Button
-			// log.Printf("\nMouse up: %d\n", button)
+			button := ev.Button
+			if button == 1 {
+				userController.PressButton(controller.Y_BUTTON, false)
+			} else if button == 2 {
+				userController.PressButton(controller.ZR_BUTTON, false)
+			}
+			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
+
+			log.Printf("\nMouse up: %d\n", button)
 		} else if ev.Kind == hook.MouseHold {
-			// button := ev.Button
-			// log.Printf("\nMouse hold: %d\n", button)
+			button := ev.Button
+			if button == 1 {
+				userController.PressButton(controller.Y_BUTTON, true)
+			} else if button == 2 {
+				userController.PressButton(controller.ZR_BUTTON, true)
+			}
+			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
+			log.Printf("\nMouse hold: %d\n", button)
+		} else if ev.Kind == hook.MouseWheel {
+			if ev.Rotation > 0 {
+				userController.MoveStick(controller.R_STICK, controller.X_AXIS, -1.0)
+			} else if ev.Rotation < 0 {
+				userController.MoveStick(controller.R_STICK, controller.X_AXIS, 1.0)
+			}
+			log.Printf("\nMouse wheel: %v %v %v\n", ev.Amount, ev.Rotation, ev.Direction)
+
+			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
+
+			go func() {
+				userController.MoveStick(controller.R_STICK, controller.X_AXIS, 0.0)
+				Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
+			}()
 		}
 		//else if ev.Kind == hook.MouseMove {
 		//	y, x := ev.Y, ev.X
