@@ -1,7 +1,5 @@
 package controller
 
-import "math"
-
 const (
 	A_BUTTON  = 0
 	B_BUTTON  = 1
@@ -38,11 +36,11 @@ const (
 
 type ControllerState struct {
 	button_pressed [8]bool
-	stick          [2][2]float32
+	stick          [2][2]float64
 	stick_pressed  [2]bool
 	dpad_pressed   [4]bool
 	control        [3]bool
-	pitch, yaw     float32
+	pitch, yaw     float64
 }
 
 func B2i(b bool) uint8 {
@@ -52,11 +50,11 @@ func B2i(b bool) uint8 {
 	return 0
 }
 
-func (state *ControllerState) MoveStick(which int, axis int, value float32) {
+func (state *ControllerState) MoveStick(which int, axis int, value float64) {
 	state.stick[which][axis] = value
 }
 
-func (state *ControllerState) ResetStick(which int, axis int, value float32) {
+func (state *ControllerState) ResetStick(which int, axis int, value float64) {
 	state.stick[which][axis] = 0.0
 }
 
@@ -74,7 +72,8 @@ func (state *ControllerState) GetStickValue(which int, axis int) byte {
 	if state.stick[which][axis] == 0.0 {
 		return 0x80
 	}
-	return byte(math.Min(math.Max(128.0+float64(state.stick[which][axis]*128.0), 0.0), 255.0))
+	return byte((state.stick[which][axis] + 1.0) * 128)
+	// return byte(math.Min(math.Max(128.0+float64(state.stick[which][axis]*128.0), 0.0), 255.0))
 }
 
 func (state *ControllerState) GetButtonMask() uint8 {
