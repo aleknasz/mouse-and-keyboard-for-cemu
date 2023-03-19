@@ -38,11 +38,11 @@ var alt_ySen int = 280
 var useX, useY, xZero, yZero int
 
 var nnp float64 = 0.8
-var r float64 = 30
+var r float64 = 60
 var k float64 = 0.02
 var dr float64 = 0
 var invertedX = false
-var invertedY = false
+var invertedY = true
 var alreadyDown bool = false
 
 var gameX, gameY int = 0, 0
@@ -59,7 +59,7 @@ func mouse2joystick(X int, Y int) {
 		X = int(math.Round(float64(X) * (r - dr) / RR))
 		Y = int(math.Round(float64(Y) * (r - dr) / RR))
 		RR = math.Sqrt(float64(X*X + Y*Y))
-		controller.MoveMouse(X+OX, Y+OY) // Calculate point on controller circle, move back to screen/window coords, and move mouse.
+		// controller.MoveMouse(X+OX, Y+OY) // Calculate point on controller circle, move back to screen/window coords, and move mouse.
 	}
 
 	// Calculate angle
@@ -70,7 +70,7 @@ func mouse2joystick(X int, Y int) {
 	} else {
 		setStick(0, 0) // Stick in equllibrium.
 	}
-	controller.MoveMouse(OX, OY)
+	// controller.MoveMouse(OX, OY)
 }
 
 func action(phi float64, tilt float64) {
@@ -170,6 +170,7 @@ func action(phi float64, tilt float64) {
 
 func setStick(x float64, y float64) {
 	// x,y are from range (-1,1) which is mapped later to (0,255)
+	//log.Printf("Setting stick to x=%f, y=%f", x, y)
 	userController.MoveStick(controller.R_STICK, controller.X_AXIS, x)
 	userController.MoveStick(controller.R_STICK, controller.Y_AXIS, y)
 }
@@ -205,32 +206,6 @@ func getAngle(x int, y int) float64 {
 // Just setup key events listener and udp server for DSU protocol
 // Also there is some legacy logic for little web site serving and motion control receiving from android device
 func main() {
-
-	if invertedX {
-		pmX = -1
-	} else {
-		pmX = 1
-	}
-
-	if invertedY {
-		pmY = -1
-	} else {
-		pmY = 1
-	}
-
-	gameW, gameH = controller.GetScreenSize()
-
-	OX = gameX + gameW/2
-	OY = gameY + gameH/2
-
-	if OX == 0 || OY == 0 {
-		OX = 500
-		OY = 500
-	}
-
-	log.Printf("Windows size %d %d %f\n", OX, OY, math.Pi/2)
-
-	controller.MoveMouse(OX, OY)
 
 	//var outBuffer = make([]byte, 100)
 	//now := 1677329375368994 //time.Now().UnixMicro()
@@ -368,6 +343,38 @@ func Abs(x int) int {
 	return x
 }
 
+func SetupMouseZone(center bool) {
+	if invertedX {
+		pmX = -1
+	} else {
+		pmX = 1
+	}
+
+	if invertedY {
+		pmY = -1
+	} else {
+		pmY = 1
+	}
+
+	gameW, gameH = controller.GetScreenSize()
+
+	if center {
+		OX = gameX + gameW/2
+		OY = gameY + gameH/2
+	} else {
+		OX, OY = controller.GetMousePos()
+	}
+
+	if OX == 0 || OY == 0 {
+		OX = 500
+		OY = 500
+	}
+
+	log.Printf("Windows size %d %d\n", OX, OY)
+
+	controller.MoveMouse(OX, OY)
+}
+
 func MouseEvent(x int, y int, ignoreMouseEvent bool) {
 	intv := 1
 
@@ -430,8 +437,8 @@ func MouseEvent(x int, y int, ignoreMouseEvent bool) {
 func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 	var prevX, prevY int16 = 0, 0
 	var sensitivity float32 = 25.0
-	var mouseSwitch bool = false
-	var ignoreMouseMove bool = false
+	// var mouseSwitch bool = false
+	var ignoreMouseMove bool = true
 	for ev := range chanHook {
 
 		if ev.Kind == hook.MouseMove || ev.Kind == hook.MouseDrag {
@@ -463,19 +470,22 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 
 			var gyro = controller.Vector3{0.0, sensitivity * float32(pitch), sensitivity * -float32(yaw)}
 
-			if mouseSwitch {
-				sx, sy := controller.GetScreenSize()
-				controller.MoveMouse(sx/2, sy/2)
-				//log.Printf("Mouse event: %v\n", gyro)
-			}
+			// if mouseSwitch {
+			// 	sx, sy := controller.GetScreenSize()
+			// 	controller.MoveMouse(sx/2, sy/2)
+			// 	//log.Printf("Mouse event: %v\n", gyro)
+			// }
 
 			if webSocketClient != nil {
 				webSocketClient.WriteJSON(controller.Vector3{0.0,
 					float32(ev.X), float32(ev.Y)})
 			}
 
-			MouseEvent(int(yaw), int(pitch), ignoreMouseMove)
+			//MouseEvent(int(yaw), int(pitch), ignoreMouseMove)
 
+			if !ignoreMouseMove {
+				mouse2joystick(int(ev.X), int(ev.Y))
+			}
 			// x_axis := float32(yaw)
 			// y_axis := float32(pitch)
 
@@ -556,6 +566,9 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			whenHappened(ev, hook.KeyUp, func() {
 				ignoreMouseMove = !ignoreMouseMove
 				log.Printf("Ignore mouse=%d\n", ignoreMouseMove)
+				if !ignoreMouseMove {
+					SetupMouseZone(false)
+				}
 			}, controller.ISO_Section)
 
 			Report(udpServer, uint64(time.Now().UnixMicro()), controller.ZeroVector3, controller.ZeroVector3)
