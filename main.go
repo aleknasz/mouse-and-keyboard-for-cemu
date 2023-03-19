@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"math"
 	"math/rand"
 	"mouse-and-keyboard-for-cemu/controller"
 	"net"
@@ -31,177 +30,6 @@ var fps = int64(60)
 var fpsInterval = 1000 / fps
 var then = time.Now().UnixMilli()
 var startTime = then
-
-var alt_xSen int = 400
-var alt_ySen int = 280
-
-var useX, useY, xZero, yZero int
-
-var nnp float64 = 0.8
-var r float64 = 60
-var k float64 = 0.02
-var dr float64 = 0
-var invertedX = false
-var invertedY = true
-var alreadyDown bool = false
-
-var gameX, gameY int = 0, 0
-var gameW, gameH int = 0, 0
-var OX, OY int = 0, 0
-var pmX, pmY float64
-var snapToFullTilt = 0.005
-
-func mouse2joystick(X int, Y int) {
-	X -= OX // Move to controller coord system.
-	Y -= OY
-	var RR = math.Sqrt(float64(X*X + Y*Y))
-	if RR > r { // Check If outside controller circle.
-		X = int(math.Round(float64(X) * (r - dr) / RR))
-		Y = int(math.Round(float64(Y) * (r - dr) / RR))
-		RR = math.Sqrt(float64(X*X + Y*Y))
-		// controller.MoveMouse(X+OX, Y+OY) // Calculate point on controller circle, move back to screen/window coords, and move mouse.
-	}
-
-	// Calculate angle
-	phi := getAngle(X, Y)
-
-	if RR > k*r && !alreadyDown { // Check If outside inner circle/deadzone.
-		action(phi, math.Pow(((RR-k*r)/(r-k*r)), nnp)) // nnp is a non-linearity parameter.
-	} else {
-		setStick(0, 0) // Stick in equllibrium.
-	}
-	// controller.MoveMouse(OX, OY)
-}
-
-func action(phi float64, tilt float64) {
-
-	if tilt > 1.0 {
-		tilt = 1.0
-	}
-
-	if snapToFullTilt != -1.0 {
-		if 1-tilt <= snapToFullTilt {
-			tilt = 1.0
-		}
-	}
-	var lb, ub float64
-	// Two cases with forward+right
-	// Tilt is forward and slightly right.
-	lb = 3 * math.Pi / 2.0 // lb is lower bound
-	ub = 7 * math.Pi / 4.0 // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := pmX * tilt * scale(phi, ub, lb)
-		y := pmY * tilt
-		setStick(x, y)
-		return
-	}
-	// Tilt is slightly forward and right.
-	lb = 7 * math.Pi / 4 // lb is lower bound
-	ub = 2 * math.Pi     // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := pmX * tilt
-		y := pmY * tilt * scale(phi, lb, ub)
-		setStick(x, y)
-		return
-	}
-
-	// Two cases with right+downward
-	// Tilt is right and slightly downward.
-	lb = 0           // lb is lower bound
-	ub = math.Pi / 4 // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := pmX * tilt
-		y := -pmY * tilt * scale(phi, ub, lb)
-		setStick(x, y)
-		return
-	}
-	// Tilt is downward and slightly right.
-	lb = math.Pi / 4 // lb is lower bound
-	ub = math.Pi / 2 // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := pmX * tilt * scale(phi, lb, ub)
-		y := -pmY * tilt
-		setStick(x, y)
-		return
-	}
-
-	// Two cases with downward+left
-	// Tilt is downward and slightly left.
-	lb = math.Pi / 2     // lb is lower bound
-	ub = 3 * math.Pi / 4 // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := -pmX * tilt * scale(phi, ub, lb)
-		y := -pmY * tilt
-		setStick(x, y)
-		return
-	}
-	// Tilt is left and slightly downward.
-	lb = 3 * math.Pi / 4 // lb is lower bound
-	ub = math.Pi         // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := -pmX * tilt
-		y := -pmY * tilt * scale(phi, lb, ub)
-		setStick(x, y)
-		return
-	}
-
-	// Two cases with forward+left
-	// Tilt is left and slightly forward.
-	lb = math.Pi         // lb is lower bound
-	ub = 5 * math.Pi / 4 // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := -pmX * tilt
-		y := pmY * tilt * scale(phi, ub, lb)
-		setStick(x, y)
-		return
-	}
-	// Tilt is forward and slightly left.
-	lb = 5 * math.Pi / 4 // lb is lower bound
-	ub = 3 * math.Pi / 2 // ub is upper bound
-	if phi >= lb && phi <= ub {
-		x := -pmX * tilt * scale(phi, lb, ub)
-		y := pmY * tilt
-		setStick(x, y)
-		return
-	}
-	// This should not happen
-	setStick(0, 0)
-}
-
-func setStick(x float64, y float64) {
-	// x,y are from range (-1,1) which is mapped later to (0,255)
-	//log.Printf("Setting stick to x=%f, y=%f", x, y)
-	userController.MoveStick(controller.R_STICK, controller.X_AXIS, x)
-	userController.MoveStick(controller.R_STICK, controller.Y_AXIS, y)
-}
-
-func scale(phi float64, lb float64, ub float64) float64 {
-	// let phi->f(phi) then, f(ub)=0 and f(lb)=1
-	return (phi - ub) / (lb - ub)
-}
-
-func getAngle(x int, y int) float64 {
-	if x == 0 {
-		var p float64
-		if y > 0 {
-			p = math.Pi
-		} else {
-			p = 0
-		}
-		return 3*math.Pi/2.0 - p
-	}
-	phi := math.Atan(float64(y) / float64(x))
-	if x < 0 && y > 0 {
-		return phi + math.Pi
-	}
-	if x < 0 && y <= 0 {
-		return phi + math.Pi
-	}
-	if x > 0 && y < 0 {
-		return phi + 2*math.Pi
-	}
-	return phi
-}
 
 // Just setup key events listener and udp server for DSU protocol
 // Also there is some legacy logic for little web site serving and motion control receiving from android device
@@ -336,103 +164,6 @@ func whenHappened(event hook.Event, eventType uint8, action func(), expectations
 	return false
 }
 
-func Abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-func SetupMouseZone(center bool) {
-	if invertedX {
-		pmX = -1
-	} else {
-		pmX = 1
-	}
-
-	if invertedY {
-		pmY = -1
-	} else {
-		pmY = 1
-	}
-
-	gameW, gameH = controller.GetScreenSize()
-
-	if center {
-		OX = gameX + gameW/2
-		OY = gameY + gameH/2
-	} else {
-		OX, OY = controller.GetMousePos()
-	}
-
-	if OX == 0 || OY == 0 {
-		OX = 500
-		OY = 500
-	}
-
-	log.Printf("Windows size %d %d\n", OX, OY)
-
-	controller.MoveMouse(OX, OY)
-}
-
-func MouseEvent(x int, y int, ignoreMouseEvent bool) {
-	intv := 1
-
-	if (x < 0 && useX > 0) || (x > 0 && useX < 0) {
-		useX = 0
-	}
-	if (y < 0 && useY > 0) || (y > 0 && useY < 0) {
-		useY = 0
-	}
-	if x != 0 && y != 0 {
-		intv = 4
-	}
-	if x == 0 {
-		xZero++
-	}
-	if xZero > 2 {
-		useX = 0
-		xZero = 0
-	}
-	if x > 0 {
-		useX += intv
-	} else {
-		useX -= intv
-	}
-	if y == 0 {
-		yZero++
-	}
-	if yZero > 2 {
-		useY = 0
-		yZero = 0
-	}
-	if y > 0 {
-		useY += intv
-	} else {
-		useY -= intv
-	}
-	if Abs(useX) > alt_xSen {
-		useX = useX / Abs(useX) * alt_xSen
-	} else if Abs(x) != 0 && Abs(useX) < alt_xSen/6.0 {
-		useX = useX / Abs(useX) * alt_xSen / 6.0
-	}
-
-	if Abs(useY) > alt_ySen {
-		useY = useY / Abs(useY) * alt_ySen
-	} else if Abs(y) != 0 && Abs(useY) < alt_ySen/6.0 {
-		useY = useY / Abs(useY) * alt_ySen / 6.0
-	}
-
-	if ignoreMouseEvent {
-		userController.MoveStick(controller.R_STICK, controller.X_AXIS, 0)
-		userController.MoveStick(controller.R_STICK, controller.Y_AXIS, 0)
-	} else {
-		userController.MoveStick(controller.R_STICK, controller.X_AXIS, -float64(useX)/float64(alt_xSen))
-		userController.MoveStick(controller.R_STICK, controller.Y_AXIS, float64(useY)/float64(alt_ySen))
-	}
-
-}
-
 // Some key or button has been pressed or mouse has been moved
 func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 	var prevX, prevY int16 = 0, 0
@@ -484,7 +215,7 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 			//MouseEvent(int(yaw), int(pitch), ignoreMouseMove)
 
 			if !ignoreMouseMove {
-				mouse2joystick(int(ev.X), int(ev.Y))
+				userController.Mouse2Joystick(int(ev.X), int(ev.Y))
 			}
 			// x_axis := float32(yaw)
 			// y_axis := float32(pitch)
@@ -567,7 +298,7 @@ func keyEventsLoop(udpServer net.PacketConn, chanHook <-chan hook.Event) {
 				ignoreMouseMove = !ignoreMouseMove
 				log.Printf("Ignore mouse=%d\n", ignoreMouseMove)
 				if !ignoreMouseMove {
-					SetupMouseZone(false)
+					userController.SetupMouseZone(false)
 				}
 			}, controller.ISO_Section)
 
